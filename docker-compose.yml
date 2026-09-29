@@ -1,0 +1,112 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: bot-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-orchestrator
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./orchestrator:/app/orchestrator
+      - ./bots:/app/bots
+      - ./utils:/app/utils
+      - ./logs:/app/logs
+    command: python -m orchestrator.main
+    networks:
+      - bot-network
+
+  # Bot 1: Data Processor
+  bot-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-data-processor
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BOT_NAME=DataProcessorBot
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./orchestrator:/app/orchestrator
+      - ./bots:/app/bots
+      - ./utils:/app/utils
+      - ./logs:/app/logs
+    command: python -m bots.data_processor_bot
+    networks:
+      - bot-network
+
+  # Bot 2: API Caller
+  bot-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-api-caller
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BOT_NAME=ApiCallerBot
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./orchestrator:/app/orchestrator
+      - ./bots:/app/bots
+      - ./utils:/app/utils
+      - ./logs:/app/logs
+    command: python -m bots.api_caller_bot
+    networks:
+      - bot-network
+
+  # Bot 3: Notification
+  bot-notification:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bot-notification
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BOT_NAME=NotificationBot
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./orchestrator:/app/orchestrator
+      - ./bots:/app/bots
+      - ./utils:/app/utils
+      - ./logs:/app/logs
+    command: python -m bots.notification_bot
+    networks:
+      - bot-network
+
+volumes:
+  redis-data:
+
+networks:
+  bot-network:
+    driver: bridge
